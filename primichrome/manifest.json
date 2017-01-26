@@ -1,0 +1,37 @@
+{
+	"manifest_version": 2,
+
+	"name": "Primi",
+	"version": "1.0",
+	"description": "A chrome alternative for https://primitive.lol/",
+
+	"browser_action": {
+		"default_icon": {
+			"128": "primi.png"
+		},
+
+		"default_title": "Primi"
+	},
+
+    "background": {
+        "scripts": ["primi.js"],
+        "persistent": true
+    },
+
+	"permissions": [
+        "contextMenus",
+		"notifications",
+		"storage",
+		"tabs",
+		"http://*/"
+	],
+
+	"options_ui": {
+	    "page": "options.html",
+	    "chrome_style": true
+	},
+
+    "icons": {
+        "128": "primi.png"
+    }
+}
