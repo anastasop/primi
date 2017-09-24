@@ -3,7 +3,7 @@
 
 	"name": "Primi",
 	"version": "1.0",
-	"description": "A chrome alternative for https://primitive.lol/",
+	"description": "A chrome alternative for https://primitive.lol/ and https://github.com/esimov/triangle",
 
 	"browser_action": {
 		"default_icon": {

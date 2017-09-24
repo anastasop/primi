@@ -12,15 +12,11 @@ import (
 	"image/png"
 	"io/ioutil"
 	"log"
-	"math/rand"
 	"net/http"
-	"runtime"
 	"sync"
 	"time"
 
 	"github.com/bmizerany/pat"
-	"github.com/fogleman/primitive/primitive"
-	"github.com/nfnt/resize"
 )
 
 const (
@@ -28,39 +24,6 @@ const (
 	// all in-memory images are discarded
 	keyExpirationInMinutes = time.Duration(5) * time.Minute
 )
-
-// primitiveOnImage is the main workhorse. Transforms an image
-// with primitive and reasonable defaults
-// TODO: the client should decide the options
-func primitiveOnImage(img image.Image) image.Image {
-	var (
-		Count      = 300
-		Alpha      = 128
-		InputSize  = 256
-		OutputSize = 800
-		Mode       = rand.Intn(9)
-		Workers    = runtime.NumCPU()
-		Repeat     = 0
-	)
-
-	Count = (rand.Intn(17) + 4) * 50 // sth between 200 and 1000
-
-	imgThumbnail := resize.Thumbnail(uint(InputSize), uint(InputSize), img, resize.Bilinear)
-	backgroundColor := primitive.MakeColor(primitive.AverageImageColor(imgThumbnail))
-
-	model := primitive.NewModel(imgThumbnail, backgroundColor, OutputSize, Workers)
-	for i := 0; i < Count; i++ {
-		model.Step(primitive.ShapeType(Mode), Alpha, Repeat)
-	}
-
-	return model.Context.Image()
-}
-
-// resizedImage a fast transform that resizes an image
-// used to check the flow of the server in development
-func resizedImage(img image.Image, x, y uint) image.Image {
-	return resize.Thumbnail(x, y, img, resize.Bilinear)
-}
 
 // downloadAndTransformImage does an HTTP GET for rawurl
 // and if it is a jpeg or png image it applies the transform
@@ -87,6 +50,7 @@ func downloadAndTransformImage(rawurl string, transform func(image.Image) image.
 // transformRequest is the payload of an HTTP request for an image transformation
 type transformRequest struct {
 	rawurl string
+	draw   string
 }
 
 // transformRequest is the result of an image transformation
@@ -115,14 +79,19 @@ var transforms struct {
 func transformer(in <-chan *transformRequest, out chan<- *event) {
 	for {
 		req := <-in
-		log.Printf("transformer starts for %q", req.rawurl)
+		log.Printf("transformer starts for %q and %q", req.draw, req.rawurl)
 
 		// beware of shadowing err. Statuses are propagated to
 		// the final error handler
 		// TODO fix it
 		var img image.Image
 		var err error
-		img, err = downloadAndTransformImage(req.rawurl, primitiveOnImage)
+		switch req.draw {
+		case "primitive":
+			img, err = downloadAndTransformImage(req.rawurl, primitiveOnImage)
+		case "triangle":
+			img, err = downloadAndTransformImage(req.rawurl, triangleOnImage)
+		}
 		if err == nil {
 			var b bytes.Buffer
 			if err = png.Encode(&b, img); err == nil {
@@ -152,7 +121,7 @@ func transformer(in <-chan *transformRequest, out chan<- *event) {
 					}(key, req.rawurl)
 
 					out <- &event{"image", string(enc), ""}
-					log.Printf("transformer finished for %q", req.rawurl)
+					log.Printf("transformer finished for %q and %q", req.draw, req.rawurl)
 				}
 			}
 		}
@@ -242,7 +211,7 @@ var showTmplRaw = `<!DOCTYPE html>
   <img src="{{.ImgURL}}"/>
 <div id="links">
   <a href="{{.SrcURL}}">Original Image</a><br>
-  <a href="{{.ImgURL}}">Primitive Image</a>
+  <a href="{{.ImgURL}}">Transformed Image</a>
 </div>
 </body>
 </html>
@@ -289,8 +258,12 @@ func main() {
 	m.Get("/primi", newSSEHandler(eventsCh, *commentd))
 	m.Post("/images", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		rawurl := req.FormValue("url")
-		tc <- &transformRequest{rawurl}
-		log.Printf("transformer accepted %q", rawurl)
+		draw := req.FormValue("draw")
+		if draw == "" {
+			draw = "primitive"
+		}
+		tc <- &transformRequest{rawurl, draw}
+		log.Printf("transformer accepted %q for %q", draw, rawurl)
 		w.WriteHeader(http.StatusAccepted)
 	}))
 	m.Get("/image/:key", http.HandlerFunc(imageHandler))

@@ -1,7 +1,16 @@
 chrome.runtime.onInstalled.addListener(function () {
     chrome.contextMenus.create({
-        "id": "primi-draw",
+        "id": "primitive-draw",
         "title": "draw with primitive",
+        "contexts": ['image']
+    }, function () {
+        if (chrome.extension.lastError) {
+            console.log("contextMenu registration failed: ", chrome.extension.lastError.message);
+        }
+    });
+    chrome.contextMenus.create({
+        "id": "triangle-draw",
+        "title": "draw with triangle",
         "contexts": ['image']
     }, function () {
         if (chrome.extension.lastError) {
@@ -59,9 +68,14 @@ chrome.contextMenus.onClicked.addListener(function (info) {
         method: 'post',
         headers: {
             "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: "url=" + info.srcUrl
+        }
     };
+
+    if (info.menuItemId === "primitive-draw") {
+        fetchOptions["body"] = "url=" + info.srcUrl + "&draw=primitive"
+    } else if (info.menuItemId === "triangle-draw") {
+        fetchOptions["body"] = "url=" + info.srcUrl + "&draw=triangle"
+    }
 
     getAddrPromise().then(function (addr) {
         fetch(addr + "/images", fetchOptions).then(function (response) {
